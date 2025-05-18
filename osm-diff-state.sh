@@ -21,9 +21,9 @@ Parameters:
 Examples:
     $0 day "2024-05-16"
     $0 day "2024-05-16 12:00:00"
-    $0 hour "2024-05-16 12:00:00"
+    $0 hour "2024-05-16 12:00"
     $0 hour "2024-05-16T12:00:00"
-    $0 minute "2024-05-16 12:00:00" "https://planet.openstreetmap.org/replication/"
+    $0 minute "2024-05-16 12:00:00" "https://planet.osm.org/replication/"
 
 Description:
     This script finds the closest OpenStreetMap replication file for a given timestamp
@@ -36,10 +36,45 @@ USAGE
 
 # Helper functions
 to_epoch() {
-    date -d "$1" +%s 2>/dev/null || {
-        echo "Error: Invalid date format. Use YYYY-MM-DD[THH:MM:SS]" >&2
+    input="${1%Z}"  # видаляємо 'Z' в кінці, якщо є
+
+    error() {
+        echo "Error: Invalid date format. Use YYYY-MM-DD[THH[:MM[:SS]]][Z]" >&2
         exit 1
     }
+
+    try_parse_mac() {
+        for fmt in \
+            "%Y-%m-%dT%H:%M:%S" \
+            "%Y-%m-%dT%H:%M" \
+            "%Y-%m-%dT%H" \
+            "%Y-%m-%d %H:%M:%S" \
+            "%Y-%m-%d %H:%M" \
+            "%Y-%m-%d %H" \
+            "%Y-%m-%d"
+        do
+            if epoch=$(date -j -f "$fmt" "$input" "+%s" 2>/dev/null); then
+                echo "$epoch"
+                return 0
+            fi
+        done
+        return 1
+    }
+
+    try_parse_linux() {
+        if epoch=$(date -d "$input" "+%s" 2>/dev/null); then
+            echo "$epoch"
+            return 0
+        else
+            return 1
+        fi
+    }
+
+    if [[ "$(uname)" == "Darwin" ]]; then
+        try_parse_mac || error
+    else
+        try_parse_linux || error
+    fi
 }
 
 validate_period() {
@@ -134,7 +169,7 @@ find_state_file() {
 [ $# -lt 2 ] && show_usage
 
 period="$1"
-timestamp="${2/T/ }"  # Replace T with space if present
+timestamp="$2"
 base_url="${3:-$DEFAULT_URL}"
 
 validate_period "$period"
