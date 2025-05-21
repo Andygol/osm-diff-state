@@ -11,6 +11,7 @@
 #   0 on success, 1 on failure (and prints an error message to stderr).
 to_epoch() {
     local input_date_string="${1%Z}" # Remove 'Z' suffix if present, as `date` handles UTC interpretation.
+    input_date_string="${input_date_string/T/ }" # Replace 'T' with space for compatibility with `date` command.
 
     # Internal error reporting function for to_epoch
     _to_epoch_error() {
@@ -26,9 +27,6 @@ to_epoch() {
 
         # Order formats from most specific to least specific
         for fmt in \
-            "%Y-%m-%dT%H:%M:%S" \
-            "%Y-%m-%dT%H:%M" \
-            "%Y-%m-%dT%H" \
             "%Y-%m-%d %H:%M:%S" \
             "%Y-%m-%d %H:%M" \
             "%Y-%m-%d %H" \
