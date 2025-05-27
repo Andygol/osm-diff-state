@@ -11,7 +11,7 @@
 #   $3: (Optional) retries - Number of retries (default: 2).
 #
 # Output:
-#   - Prints a message to stderr if the URL is not accessible after retries.
+#   - Uses logging system for status messages
 #
 # Returns:
 #   - 0 if the URL is accessible (wget --spider returns 0).
@@ -22,9 +22,11 @@ check_url_accessibility() {
     local retries="${3:-2}"          # Default 2 retries
 
     if [ -z "$url_to_check" ]; then
-        echo "Error (check_url_accessibility): No URL provided." >&2
+        log_error "check_url_accessibility: No URL provided."
         return 127 # Invalid argument
     fi
+
+    log_debug "Checking URL accessibility: $url_to_check (timeout: ${timeout_seconds}s, retries: $retries)"
 
     # Using wget --spider. It tries to connect and get headers.
     # -q: quiet mode
@@ -38,23 +40,23 @@ check_url_accessibility() {
 
     while [ "$attempt" -le "$max_attempts" ]; do
         if [ "$attempt" -gt 1 ]; then
-            # echo "Info (check_url_accessibility): Retrying URL check (attempt $attempt/$max_attempts): $url_to_check" >&2
+            log_debug "Retrying URL check (attempt $attempt/$max_attempts): $url_to_check"
             # Optional: add a small delay between retries
             # sleep 2
-            :
         fi
 
         wget --spider -q -T "$timeout_seconds" -t 1 "$url_to_check" # -t 1 means 1 try (no wget internal retries)
         local wget_exit_code=$?
 
         if [ "$wget_exit_code" -eq 0 ]; then
-            # echo "Info (check_url_accessibility): URL is accessible: $url_to_check" >&2 # Optional success message
+            log_debug "URL is accessible: $url_to_check"
             return 0 # Success
         fi
 
+        log_debug "URL check attempt $attempt failed with exit code $wget_exit_code"
         attempt=$((attempt + 1))
     done
 
-    echo "Error (check_url_accessibility): URL is not accessible after $max_attempts attempts or timed out: $url_to_check" >&2
+    log_error "URL is not accessible after $max_attempts attempts or timed out: $url_to_check"
     return 1 # General error, or could return last wget_exit_code
 }
