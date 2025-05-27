@@ -20,7 +20,10 @@ To use the tool, you need to specify the following parameters:
 - `replication_url`: (optional, default <https://planet.osm.org/replication/>) The URL of the replication server. This should be in the format "<https://download.openstreetmap.fr/replication/europe/poland/lodzkie/minute/>".
 - options:
   - `--osm-like[=<true|false>]`: (optional, default true) If this flag is set, the tool will use the OSM-like URL format for the replication server. This is useful if you are using a server that does not follow the standard replication system.
-  - `--help`: (optional) If this flag is set, the tool will display the help message and exit.
+  - `--help|-h`: (optional) If this flag is set, the tool will display the help message and exit.
+  - `--log-level=<level>`: (optional, default "info") Set the log level for the tool. The available levels are "debug", "info", "warning", "error", and "fatal". This can be useful for debugging or for getting more information about the tool's operation.
+  - `--verbose|-v`: (optional) Verbose is an equivalent to `--log-level=debug`. It will output more information about the tool's operation.
+  - `--quiet|-q`: (optional) Quiet is an equivalent to `--log-level=error`. It will suppress all output except for errors. This can be useful if you only want to see error messages and nothing else.
 
 ## Example
 
@@ -28,6 +31,21 @@ Simple request for a state file for a specific day that is stored on the default
 
 ```bash
 ./osm-diff-state.sh day "2025-05-16"
+```
+
+```log
+[2025-05-27 09:52:07] INFO: Script parameters - Period: day, Timestamp: 2025-05-16
+[2025-05-27 09:52:07] INFO: Using URL: https://planet.osm.org/replication/
+[2025-05-27 09:52:07] INFO: Parsing and preparing base URL
+[2025-05-27 09:52:07] INFO: URL parsing completed successfully: 'https://planet.osm.org/replication/' -> 'https://planet.osm.org/replication/day/'
+[2025-05-27 09:52:07] INFO: Effective base URL: https://planet.osm.org/replication/day/
+[2025-05-27 09:52:07] INFO: Checking URL accessibility: https://planet.osm.org/replication/day/
+[2025-05-27 09:52:07] INFO: Fetching latest sequence number from: https://planet.osm.org/replication/day/state.txt
+[2025-05-27 09:52:07] INFO: Fetching latest timestamp from: https://planet.osm.org/replication/day/state.txt
+[2025-05-27 09:52:08] INFO: Starting binary search with bounds: [4629, 4640]
+[2025-05-27 09:52:09] INFO: Binary search found sequence number: 4629
+[2025-05-27 09:52:10] INFO: Final result URL: https://planet.osm.org/replication/day/000/004/629.state.txt
+https://planet.osm.org/replication/day/000/004/629.state.txt
 ```
 
 Example with explicit URL that is following the OSM-like URL format:

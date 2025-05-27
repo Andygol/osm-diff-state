@@ -15,10 +15,16 @@ validate_period() {
     # Use provided list or a default; ensure spaces around for robust matching.
     local valid_options=" ${VALID_PERIODS_LIST:-day hour minute} "
 
+    log_debug "Validating period: '$period_to_validate'"
+
     if [[ "$valid_options" == *" $period_to_validate "* ]]; then
+        log_debug "Period validation successful: '$period_to_validate' is valid"
         return 0 # Period is valid
     else
-        echo "Error (validate_period): Period must be one of: ${valid_options}" >&2
+        local error_msg="Period must be one of: ${valid_options}"
+        log_error "Period validation failed: '$period_to_validate' is not valid"
+        log_error "Available periods: $valid_options"
+        # echo "Error (validate_period): $error_msg" >&2
         return 1 # Period is invalid
     fi
 }

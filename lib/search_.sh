@@ -27,39 +27,52 @@ perform_binary_search_for_sequence() {
     local low_bound_seq="$3"
     local high_bound_seq="$4"
 
+    log_debug "Starting binary search: target_epoch=$target_epoch, bounds=[$low_bound_seq, $high_bound_seq]"
+
     local result_sequence_number=-1
     local mid_point mid_url mid_timestamp_str mid_epoch
+    local iteration=0
 
     # Ensure numeric comparison for bounds
     low_bound_seq=$((10#$low_bound_seq))
     high_bound_seq=$((10#$high_bound_seq))
 
+    log_debug "Normalized inital bounds: [$low_bound_seq, $high_bound_seq]"
+
     while [ "$low_bound_seq" -le "$high_bound_seq" ]; do
         mid_point=$(( (low_bound_seq + high_bound_seq) / 2 ))
+
+        (( iteration++))
+
+        log_debug "Binary search iteration $iteration: checking sequenceNumber=$mid_point (bounds: [$low_bound_seq, $high_bound_seq])"
 
         mid_url=$(get_sequence_file_url "$effective_base_url" "$mid_point")
         if [ $? -ne 0 ]; then
             # This should ideally not happen if mid_point is always numeric.
-            echo "Error (search): Could not generate URL for sequence $mid_point. This may indicate a problem with sequence bounds." >&2
+            log_error "Could not generate URL for sequence $mid_point. This may indicate a problem with sequence bounds."
             # Attempt to recover by reducing the search space, but this is an unexpected state.
             high_bound_seq=$((mid_point - 1))
             continue
         fi
 
+        log_debug "Checking state file: $mid_url"
+
         mid_timestamp_str=$(get_state_param "$mid_url" "timestamp")
         if [ $? -ne 0 ] || [ -z "$mid_timestamp_str" ]; then
             # Failed to get timestamp (e.g., file not found, parameter missing).
+            log_warn "Timestamp for sequence $mid_point not found or empty. URL: $mid_url. Searching lower half."
             # This usually means the sequence mid_point is too high or does not exist yet.
             # So, we search in the lower half.
-            # echo "Debug (search): Timestamp for sequence $mid_point not found or empty. URL: $mid_url" >&2
             high_bound_seq=$((mid_point - 1))
             continue
         fi
 
+        log_debug "Sequence $mid_point timestamp: $mid_timestamp_str"
+
         mid_epoch=$(to_epoch "$mid_timestamp_str")
         if [ $? -ne 0 ]; then
             # Failed to parse the timestamp obtained for the sequence file.
-            echo "Warning (search): Could not parse timestamp '$mid_timestamp_str' for sequence $mid_point (URL: $mid_url). Skipping this sequence." >&2
+            log_warn "Could not parse timestamp '$mid_timestamp_str' for sequence $mid_point (URL: $mid_url). Skipping this sequence."
             # Treat this sequence as unusable. Since we don't know if it's too early or too late,
             # a common strategy is to assume it's problematic and search in the lower half
             # to be conservative, or one could try to implement more complex logic.
@@ -75,16 +88,19 @@ perform_binary_search_for_sequence() {
             # in the upper half of the current search space.
             result_sequence_number=$mid_point
             low_bound_seq=$((mid_point + 1))
+            log_debug "Found candidate sequence $result_sequence_number with epoch timestamp $mid_epoch (<= $target_epoch). Searching upper half."
         else
             # The timestamp of this sequence (mid_point) is after the target_epoch.
             # This sequence is too new. We must search in the lower half.
             high_bound_seq=$((mid_point - 1))
+            log_debug "Sequence $mid_point with epoch timestamp $mid_epoch is too new (> $target_epoch). Searching lower half."
         fi
     done
 
     if [ "$result_sequence_number" -eq -1 ]; then
         # No sequence file was found whose timestamp is <= target_epoch within the given bounds.
         # This can happen if target_epoch is earlier than the timestamp of the lowest sequence number.
+        log_error "No suitable sequence found for target_epoch $target_epoch within bounds [$low_bound_seq, $high_bound_seq]."
         return 1 # Indicate no suitable sequence found
     else
         echo "$result_sequence_number" # Output the found sequence number
