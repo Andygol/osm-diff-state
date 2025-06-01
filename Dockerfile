@@ -1,4 +1,6 @@
-FROM alpine:latest
+ARG BASE_IMAGE
+
+FROM ${BASE_IMAGE:-alpine:latest}
 
 RUN apk add --no-cache bash wget
 
