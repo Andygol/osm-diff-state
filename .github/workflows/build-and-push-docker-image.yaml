@@ -1,0 +1,219 @@
+name: Build and Publish Docker Images
+
+on:
+  workflow_dispatch: # Allow manual trigger
+  pull_request:
+    branches:
+      - main
+      - 'release/*'
+    types:
+      - closed
+  push:
+    tags:
+      - 'v*.*.*' # Match semantic version tags
+
+jobs:
+  prepare-build:
+    name: Prepare build environment
+    runs-on: ubuntu-latest
+    outputs:
+      base_image: ${{ steps.get_base_image.outputs.base_image }}
+      base_image_name: ${{ steps.parse_base_image.outputs.base_image_name }}
+      base_image_tag: ${{ steps.parse_base_image.outputs.base_image_tag }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get base image from repository variable
+        id: get_base_image
+        run: |
+          BASE_IMAGE="${{ vars.BASE_IMAGE}}"
+
+          if [ -z "$BASE_IMAGE" ]; then
+            echo "BASE_IMAGE variable is not set. Using default value: alpine:latest"
+            BASE_IMAGE="alpine:latest"
+          else
+            echo "Using BASE_IMAGE from repository variable: $BASE_IMAGE"
+          fi
+
+          echo "base_image=${BASE_IMAGE}" >> $GITHUB_OUTPUT
+
+      - name: Parse base image
+        if: steps.get_base_image.outputs.base_image != ''
+        id: parse_base_image
+        run: |
+          BASE_IMAGE="${{ steps.get_base_image.outputs.base_image }}"
+          if [[ "${BASE_IMAGE}" =~ ^([a-zA-Z0-9\.\-]+):([a-zA-Z0-9\.\-]+)$ ]]; then
+            echo "base_image_name=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
+            echo "base_image_tag=${BASH_REMATCH[2]}" >> $GITHUB_OUTPUT
+          else
+            echo "base_image_name=${BASE_IMAGE}" >> $GITHUB_OUTPUT
+            echo "base_image_tag=latest" >> $GITHUB_OUTPUT
+          fi
+
+  build-and-push:
+    needs: [ prepare-build ]
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        registry:
+          - ghcr.io
+          - docker.io
+    name: Prepare and push image to ${{ matrix.registry }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract Repo Name
+        id: extract_repo_name
+        run: |
+          echo "REPO_NAME=${GITHUB_REPOSITORY#${GITHUB_REPOSITORY_OWNER}/}" >> $GITHUB_ENV
+          echo "Repository name: $REPO_NAME"
+
+      - name: Get ${{ matrix.registry }} regystry credentials
+        id: get_regestry_credentials
+        run: |
+          REG="${{ matrix.registry }}"
+          echo "Processing ${REG} credentials"
+          case "${REG}" in
+            "ghcr.io")
+              echo "registry_login=${{ github.actor }}" >> $GITHUB_OUTPUT
+              echo "registry_token=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_OUTPUT
+              ;;
+            "docker.io")
+              echo "registry_login=${{ secrets.DOCKERHUB_LOGIN }}" >> $GITHUB_OUTPUT
+              echo "registry_token=${{ secrets.DOCKERHUB_TOKEN }}" >> $GITHUB_OUTPUT
+              ;;
+            *)
+             ;;
+          esac
+
+      - name: Check registry credentials
+        id: check_registry_credentials
+        run: |
+          if [ -z "${{ steps.get_regestry_credentials.outputs.registry_login }}" ] || [ -z "${{ steps.get_regestry_credentials.outputs.registry_token }}" ]; then
+            echo "is_registry_credentials=false" >> $GITHUB_OUTPUT
+            echo "No credentials found for ${{ matrix.registry }}"
+          else
+            echo "is_registry_credentials=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Login to ${{ matrix.registry }} container registry
+        if: steps.check_registry_credentials.outputs.is_registry_credentials == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ matrix.registry }}
+          username: ${{ steps.get_regestry_credentials.outputs.registry_login }}
+          password: ${{ steps.get_regestry_credentials.outputs.registry_token }}
+
+      - name: Check if image tag exists in ${{ matrix.registry }}
+        id: image_exists
+        if: steps.check_registry_credentials.outputs.is_registry_credentials == 'true'
+        run: |
+          REPO_NAME="${{ env.REPO_NAME }}"
+          TAG_NAME="${{ github.ref_name }}"
+          REGISTRY="${{ matrix.registry }}"
+          OWNER="${{ steps.get_regestry_credentials.outputs.registry_login }}"
+          echo "Checking if image ${REGISTRY}/${OWNER}/${REPO_NAME}:${TAG_NAME} exists in ${REGISTRY}"
+
+          case "${REGISTRY}" in
+            "ghcr.io")
+              URL="https://ghcr.io/v2/${OWNER}/${REPO_NAME}/manifests/${TAG_NAME}"
+              TOKEN="${{ steps.get_regestry_credentials.outputs.registry_token }}"
+              ;;
+            "docker.io")
+              URL="https://registry.hub.docker.com/v2/repositories/${OWNER}/${REPO_NAME}/tags/${TAG_NAME}"
+              TOKEN="${{ steps.get_regestry_credentials.outputs.registry_token }}"
+              ;;
+          esac
+
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${TOKEN}" "${URL}")
+
+          if [ "${STATUS}" -eq 200 ]; then
+            echo "Image ${REGISTRY}/${OWNER}/${REPO_NAME}:${TAG_NAME} exists in ${REGISTRY}"
+            echo "image_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Image ${REGISTRY}/${OWNER}/${REPO_NAME}:${TAG_NAME} does not exist in ${REGISTRY}"
+            echo "image_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up QEMU
+        if: steps.check_registry_credentials.outputs.is_registry_credentials == 'true' && steps.image_exists.outputs.image_exists == 'false'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: steps.check_registry_credentials.outputs.is_registry_credentials == 'true' && steps.image_exists.outputs.image_exists == 'false'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set release date (timestamp)
+        if: steps.check_registry_credentials.outputs.is_registry_credentials == 'true' && steps.image_exists.outputs.image_exists == 'false'
+        run: |
+          echo "BUILD_TIME=$(date --utc +%FT%T.%3NZ)" >> $GITHUB_ENV
+          echo "Release timestamp: $BUILD_TIME"
+
+      - name: Docker image build information
+        if: steps.check_registry_credentials.outputs.is_registry_credentials == 'true' && steps.image_exists.outputs.image_exists == 'false'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ matrix.registry }}/${{ github.repository_owner }}/${{ env.REPO_NAME }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+            type=semver,pattern={{version}},suffix=-${{ needs.prepare-build.outputs.base_image_name }}-${{ needs.prepare-build.outputs.base_image_tag }}
+            type=semver,pattern={{major}}.{{minor}},suffix=-${{ needs.prepare-build.outputs.base_image_name }}-${{ needs.prepare-build.outputs.base_image_tag }}
+            type=semver,pattern={{major}},suffix=-${{ needs.prepare-build.outputs.base_image_name }}-${{ needs.prepare-build.outputs.base_image_tag }},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+
+          labels: |
+            org.opencontainers.image.maintainer=Andrii Holovin
+            org.opencontainers.image.created=${{ env.BUILD_TIME }}
+            org.opencontainers.image.authors=Andrii Holovin
+            org.opencontainers.image.url=https://github.com/${{ github.repository }}
+            org.opencontainers.image.documentation=https://github.com/${{ github.repository }}/blob/main/README.md
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version={{tag}}
+            org.opencontainers.image.revision={{sha}}
+            org.opencontainers.image.vendor=Andrii Holovin
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.ref.name=osm-diff-state:{{tag}}
+            org.opencontainers.image.title=osm-diff-state
+            org.opencontainers.image.description=OSM Diff State is a tool for searching diff files sequence numbers.
+            org.opencontainers.image.base.name=${{ needs.prepare-build.outputs.base_image }}
+
+      - name: Build and push Docker image to ${{ matrix.registry }}
+        id: build-and-push
+        if: steps.check_registry_credentials.outputs.is_registry_credentials == 'true' && steps.image_exists.outputs.image_exists == 'false'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BASE_IMAGE=${{ needs.prepare-build.outputs.base_image }}
+
+      - name: Generate artifact attestation
+        if: steps.check_registry_credentials.outputs.is_registry_credentials == 'true' && steps.image_exists.outputs.image_exists == 'false'
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-digest: ${{ steps.build-and-push.outputs.digest }}
+          subject-name: ${{ matrix.registry }}/${{ github.repository_owner }}/osm-diff-state
+          push-to-registry: true
