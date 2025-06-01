@@ -139,7 +139,7 @@ show_usage() {
     # Parameters section
     print_section "PARAMETERS" "$ARROW" "$GREEN"
     print_param "period" "Replication period (${BOLD}day, hour, minute${RESET})" "true"
-    print_param "timestamp" "Date and time in ${UNDERLINE}${BOLD}YYYY-MM-DD${DIM}[<T| >[HH[:MM[:SS]]]]${RESET} format" "true"
+    print_param "timestamp" "Date and time in ${UNDERLINE}${BOLD}YYYY-MM-DD${DIM}[<T| >HH[:MM[:SS]]]${RESET} format" "true"
     print_param "replication_url" "URL to replication data ${DIM}(Optional)${RESET}" "false"
 
     printf "\n  ${DIM}${GRAY}${INFO} Default URL: ${UNDERLINE}%s${RESET}${DIM}${GRAY}${RESET}\n" "$default_repl_url"
