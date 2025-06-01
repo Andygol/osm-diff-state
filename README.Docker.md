@@ -12,12 +12,28 @@ Then, push it to your registry, e.g. `docker push myregistry.com/osm-diff-state`
 
 Consult Docker's [getting started](https://docs.docker.com/go/get-started-sharing/) docs for more detail on building and pushing.
 
+## Using pre-built Docker Images
+
+If you prefer not to build the Docker image yourself, you can use the pre-built images (amd64 or arm64) available on [Docker Hub](https://hub.docker.com/r/andygol/osm-diff-state) or [GitHub Container Registry](https://github.com/users/Andygol/packages/container/package/osm-diff-state).
+
+- For Docker Hub, you can pull the image using:
+
+  ```bash
+  docker pull osm-diff-state:latest
+  ```
+
+- For GitHub Container Registry, you can pull the image using:
+
+  ```bash
+  docker pull ghcr.io/andygol/osm-diff-state:latest
+  ```
+
 ## Run the Docker Container
 
 To run the Docker container, use (for example) the following command:
 
 ```bash
-docker run --rm -it osm-diff-state:latest minute "2025-05-16 00:00:00" https://download.openstreetmap.fr/replication/europe/poland/lodzkie/minute/ --osm-like=false
+docker run --rm -it ghcr.io/andygol/osm-diff-state:latest minute "2025-05-16 00:00:00" https://download.openstreetmap.fr/replication/europe/poland/lodzkie/minute/ --osm-like=false
 ```
 
 This command will run the `osm-diff-state` tool in a Docker container, using the specified parameters to get state file for a diff for the given minute.
