@@ -194,6 +194,9 @@ jobs:
             org.opencontainers.image.description=OSM Diff State is a tool for searching diff files sequence numbers.
             org.opencontainers.image.base.name=${{ needs.prepare-build.outputs.base_image }}
 
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
+
       - name: Build and push Docker image to ${{ matrix.registry }}
         id: build-and-push
         if: steps.check_registry_credentials.outputs.is_registry_credentials == 'true' && steps.image_exists.outputs.image_exists == 'false'
