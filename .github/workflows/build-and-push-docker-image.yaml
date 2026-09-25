@@ -23,7 +23,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Get base image from repository variable
         id: get_base_image
@@ -72,7 +72,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Extract Repo Name
         id: extract_repo_name
@@ -110,7 +110,7 @@ jobs:
 
       - name: Login to ${{ matrix.registry }} container registry
         if: steps.check_registry_credentials.outputs.is_registry_credentials == 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4.6.0
         with:
           registry: ${{ matrix.registry }}
           username: ${{ steps.get_regestry_credentials.outputs.registry_login }}
@@ -149,11 +149,11 @@ jobs:
 
       - name: Set up QEMU
         if: steps.check_registry_credentials.outputs.is_registry_credentials == 'true' && steps.image_exists.outputs.image_exists == 'false'
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4.4.0
 
       - name: Set up Docker Buildx
         if: steps.check_registry_credentials.outputs.is_registry_credentials == 'true' && steps.image_exists.outputs.image_exists == 'false'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4.4.1
 
       - name: Set release date (timestamp)
         if: steps.check_registry_credentials.outputs.is_registry_credentials == 'true' && steps.image_exists.outputs.image_exists == 'false'
@@ -164,7 +164,7 @@ jobs:
       - name: Docker image build information
         if: steps.check_registry_credentials.outputs.is_registry_credentials == 'true' && steps.image_exists.outputs.image_exists == 'false'
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6.2.0
         with:
           images: ${{ matrix.registry }}/${{ github.repository_owner }}/${{ env.REPO_NAME }}
           flavor: |
@@ -197,7 +197,7 @@ jobs:
       - name: Build and push Docker image to ${{ matrix.registry }}
         id: build-and-push
         if: steps.check_registry_credentials.outputs.is_registry_credentials == 'true' && steps.image_exists.outputs.image_exists == 'false'
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7.4.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -212,7 +212,7 @@ jobs:
 
       - name: Generate artifact attestation
         if: steps.check_registry_credentials.outputs.is_registry_credentials == 'true' && steps.image_exists.outputs.image_exists == 'false'
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v4.2.2
         with:
           subject-digest: ${{ steps.build-and-push.outputs.digest }}
           subject-name: ${{ matrix.registry }}/${{ github.repository_owner }}/osm-diff-state
